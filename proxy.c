@@ -18,11 +18,14 @@
 #define MAX_OBJECT_SIZE 102400
 
 /* You won't lose style points for including this long line in your code */
-static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
+static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\n";
 
-void doit(int fd);
+void doit(int clientfd);
 void read_requesthdrs(rio_t *rp);
-void parse_uri(char *uri, char *host, int *port, char *path);
+void build_get(char *http_hdr, char * method, char *path, char *version); 
+void build_requesthdrs(rio_t *rpi, char *http_hdr, char *host); 
+void build_clientresp(rio_t *rpi, char *http_res); 
+void parse_uri(char *uri, char *host, char *port, char *path);
 void serve_static(int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
@@ -63,45 +66,63 @@ int main(int argc, char **argv)
  * doit - handle one HTTP request/response transaction
  */
 /* $begin doit */
-void doit(int fd) 
+void doit(int clientfd) 
 {
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
-    char host[MAXLINE], path[MAXLINE];
-    int port; 
+    char http_hdr[MAXLINE], host[MAXLINE], path[MAXLINE];
+    char port[MAXLINE], server_res[MAXLINE]; 
 
     int serverfd; 
 
-    rio_t rio;
+    rio_t rio_c, rio_s;
 
     /* Read request line and headers */
-    Rio_readinitb(&rio, fd);
-    if (!Rio_readlineb(&rio, buf, MAXLINE))  //line:netp:doit:readrequest
+    Rio_readinitb(&rio_c, clientfd);
+    if (!Rio_readlineb(&rio_c, buf, MAXLINE))  //line:netp:doit:readrequest
         return;
-    printf("%s", buf);
     sscanf(buf, "%s %s %s", method, uri, version);       //line:netp:doit:parserequest
+    strcpy(version, "HTTP/1.0");                    
     if (strcasecmp(method, "GET")) {                     //line:netp:doit:beginrequesterr
-        clienterror(fd, method, "501", "Not Implemented",
-                "Tiny does not implement this method");
+        clienterror(clientfd, method, "501", "Not Implemented",
+                "Proxy Server does not implement this method");
         return;
     }                                                    //line:netp:doit:endrequesterr
-    read_requesthdrs(&rio);                              //line:netp:doit:readrequesthdrs
-
-    /* Parse URL into host, path, port TODO: Fix so it works for all cases */
-    parse_uri(uri, host, &port, path);       //line:netp:doit:staticcheck
-    printf("HostName: %s\n", host);
-    printf("Path: %s\n", path);
-    printf("Port: %d\n", port);
     
+    /* Parse URL into host, path, port TODO: Fix so it works for all cases */
+    parse_uri(uri, host, port, path);       //line:netp:doit:staticcheck
     /* Form new HTTP Request and send it to server */ 
-
+    build_get(http_hdr, method, path, version);
+    build_requesthdrs(&rio_c, http_hdr, host); 
+    printf("%s", http_hdr);
+    
     /* Open Connection to Server */ 
     serverfd = Open_clientfd(host, port); 
-
     /* Listen for response from server and forward to client fd */ 
+    Rio_readinitb(&rio_s, serverfd); 
+    Rio_writen(serverfd, http_hdr, strlen(http_hdr));
+    build_clientresp(&rio_s, server_res);
+    printf("+=+=+++++++=\n\n\n %s\n", server_res);
+    
+    Rio_writen(clientfd, server_res, strlen(server_res));
 
-
+    Close(serverfd);
 }
 /* $end doit */
+
+/* 
+ * build_get - Adds custom GET to new http Request
+ *  Uses HTTP/1.0 
+ */
+void build_get(char *http_hdr, char *method, char *path, char *version)
+{
+    strcpy(http_hdr, method);
+    strcat(http_hdr, " ");
+    strcat(http_hdr, path); 
+    strcat(http_hdr, " "); 
+    strcat(http_hdr, version); 
+    strcat(http_hdr, "\n"); 
+}
+
 
 /*
  * read_requesthdrs - read HTTP request headers and output them.
@@ -122,16 +143,73 @@ void read_requesthdrs(rio_t *rp)
 /* $end read_requesthdrs */
 
 /*
+ * build_requesthdrs - build HTTP request headers, print it then send
+ * to server.
+ */
+/* $begin build_requesthdrs */
+void build_requesthdrs(rio_t *rp, char *http_hdr, char *host) 
+{
+    char buf[MAXLINE];
+
+    Rio_readlineb(rp, buf, MAXLINE);
+    if (!strstr(buf, "Host: ")) {
+        strcat(http_hdr, "Host: ");
+        strcat(http_hdr, host);
+        strcat(http_hdr, "\n");
+    }
+    else 
+        strcat(http_hdr, buf);
+
+    while(strcmp(buf, "\r\n")) {          //line:netp:buildhdrs:checkterm
+        Rio_readlineb(rp, buf, MAXLINE);
+
+        /* Changes to header, change User$-Agent and Connection hdrs */
+        if (strstr(buf, "User-Agent: "))
+            strcat(http_hdr, user_agent_hdr);
+        else if (strstr(buf, "Connection: ")) {
+            strcat(http_hdr, "Connection: close\n");
+            strcat(http_hdr, "Proxy-Connection: close\n");
+        }
+        else 
+            strcat(http_hdr, buf);
+    }
+    return;
+}
+/* $end build_requesthdrs */
+
+
+/*
+ * build_clientresp - builds server response and sends to client
+ */
+/* $begin build_clientresp */
+void build_clientresp(rio_t *rpi, char *http_res)
+{
+    char buf[MAXLINE];
+
+    Rio_readlineb(rpi, buf, MAXLINE);
+    strcat(http_res, buf);
+
+    while(strcmp(buf, "\r\n")) {          //line:netp:buildhdrs:checkterm
+        Rio_readlineb(rpi, buf, MAXLINE);
+        strcat(http_res, buf);
+    }
+    return;
+}
+/* $end build_requesthdrs */
+
+/*
  * parse_uri - parse URI into host, path and port
  */
 /* $begin parse_uri */
-void parse_uri(char *uri, char *host, int *port, char *path) 
+void parse_uri(char *uri, char *host, char *port, char *path) 
 {
 
-    *port = 80;   /* Default Port */
+    strcpy(port, "80");   /* Default Port */
 
-    sscanf(uri, "http://%s[^:]:%d/%s[^\n]", host, port, path);
+    sscanf(uri, "http://%s[^:]:%s/%s[^\n]", host, port, path);
     sscanf(uri, "%*[^/]%*[/]%[^/]", host);
+
+    strcpy(path, "/");
 }
 /* $end parse_uri */
 
@@ -147,11 +225,11 @@ void clienterror(int fd, char *cause, char *errnum,
     char buf[MAXLINE], body[MAXBUF];
 
     /* Build the HTTP response body */
-    sprintf(body, "<html><title>Tiny Error</title>");
+    sprintf(body, "<html><title>Proxy Server Error</title>");
     sprintf(body, "%s<body bgcolor=""ffffff"">\r\n", body);
     sprintf(body, "%s%s: %s\r\n", body, errnum, shortmsg);
     sprintf(body, "%s<p>%s: %s\r\n", body, longmsg, cause);
-    sprintf(body, "%s<hr><em>The Tiny Web server</em>\r\n", body);
+    sprintf(body, "%s<hr><em>Tim's Proxy Web server</em>\r\n", body);
 
     /* Print the HTTP response */
     sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
