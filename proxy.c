@@ -24,7 +24,7 @@ void doit(int clientfd);
 void read_requesthdrs(rio_t *rp);
 void build_get(char *http_hdr, char * method, char *path, char *version); 
 void build_requesthdrs(rio_t *rpi, char *http_hdr, char *host); 
-void build_clientresp(rio_t *rpi, char *http_res); 
+void read_n_send(rio_t *rpi, int clientfd);
 void parse_uri(char *uri, char *host, char *port, char *path);
 void serve_static(int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
@@ -70,7 +70,7 @@ void doit(int clientfd)
 {
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
     char http_hdr[MAXLINE], host[MAXLINE], path[MAXLINE];
-    char port[MAXLINE], server_res[MAXLINE]; 
+    char port[MAXLINE]; 
 
     int serverfd; 
 
@@ -100,10 +100,9 @@ void doit(int clientfd)
     /* Listen for response from server and forward to client fd */ 
     Rio_readinitb(&rio_s, serverfd); 
     Rio_writen(serverfd, http_hdr, strlen(http_hdr));
-    build_clientresp(&rio_s, server_res);
-    printf("+=+=+++++++=\n\n\n %s\n", server_res);
     
-    Rio_writen(clientfd, server_res, strlen(server_res));
+    /* Reads from server and sends to client */
+    read_n_send(&rio_s, clientfd);
 
     Close(serverfd);
 }
@@ -179,23 +178,21 @@ void build_requesthdrs(rio_t *rp, char *http_hdr, char *host)
 
 
 /*
- * build_clientresp - builds server response and sends to client
+ * read_n_send - Reads from server and forwards to client
  */
-/* $begin build_clientresp */
-void build_clientresp(rio_t *rpi, char *http_res)
+/* $begin read_n_send */
+void read_n_send(rio_t *rpi, int clientfd)
 {
     char buf[MAXLINE];
 
-    Rio_readlineb(rpi, buf, MAXLINE);
-    strcat(http_res, buf);
-
-    while(strcmp(buf, "\r\n")) {          //line:netp:buildhdrs:checkterm
-        Rio_readlineb(rpi, buf, MAXLINE);
-        strcat(http_res, buf);
+    /* Read from server and send to client */
+    while(Rio_readlineb(rpi, buf, MAXLINE)) {
+        printf("%s", buf);
+        Rio_writen(clientfd, buf, strlen(buf));
     }
-    return;
+    
 }
-/* $end build_requesthdrs */
+/* $end read_n_send */
 
 /*
  * parse_uri - parse URI into host, path and port
