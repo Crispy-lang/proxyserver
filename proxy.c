@@ -24,7 +24,7 @@ void doit(int clientfd);
 void read_requesthdrs(rio_t *rp);
 void build_get(char *http_hdr, char * method, char *path, char *version); 
 void build_requesthdrs(rio_t *rpi, char *http_hdr, char *host); 
-void read_n_send(rio_t *rpi, int clientfd);
+void read_n_send(int serverfd, int clientfd);
 void parse_uri(char *uri, char *host, char *port, char *path);
 void serve_static(int fd, char *filename, int filesize);
 void get_filetype(char *filename, char *filetype);
@@ -95,14 +95,14 @@ void doit(int clientfd)
     build_requesthdrs(&rio_c, http_hdr, host); 
     printf("%s", http_hdr);
 
-    /* Open Connection to Server */ 
+    /* Open Connection to Server. TODO: Error check */ 
     serverfd = Open_clientfd(host, port); 
     /* Listen for response from server and forward to client fd */ 
     Rio_readinitb(&rio_s, serverfd); 
     Rio_writen(serverfd, http_hdr, strlen(http_hdr));
 
     /* Reads from server and sends to client */
-    read_n_send(&rio_s, clientfd);
+    read_n_send(serverfd, clientfd);
 
     Close(serverfd);
 }
@@ -181,14 +181,15 @@ void build_requesthdrs(rio_t *rp, char *http_hdr, char *host)
  * read_n_send - Reads from server and forwards to client
  */
 /* $begin read_n_send */
-void read_n_send(rio_t *rpi, int clientfd)
+void read_n_send(int serverfd, int clientfd)
 {
+    int n;
     char buf[MAXLINE];
 
     /* Read from server and send to client */
-    while(Rio_readlineb(rpi, buf, MAXLINE)) {
+    while((n = Rio_readn(serverfd, buf, MAXLINE))) {
         // printf("%s", buf);
-        Rio_writen(clientfd, buf, strlen(buf));
+        Rio_writen(clientfd, buf, n);
     }
 
 }
@@ -226,11 +227,13 @@ void parse_uri(char *uri, char *host, char *port, char *path)
             curr = next;
             /* Parsing remaining path */
             strcpy(path, curr);
+            strcat(path, "\0");
             printf("Aft Port parsed port/path %s/%s\n", port, path);
         }
         /* Host has no path */
         else {
             strcpy(path, curr);
+            strcat(path, "\0");
             printf("Host has no path\n");
         }
     }
@@ -240,16 +243,18 @@ void parse_uri(char *uri, char *host, char *port, char *path)
         printf("In host without port \n");
         if ((next = strpbrk(curr, "/"))) { 
             strncpy(host, curr, next - curr);      
-            strcat(host, "\0");
+            // strcat(host, "\0");
 
             curr = next;
             /* Parsing path now */
             strcpy(path, curr);
+            // strcat(path, "\0");
             printf("No port, Parsed host/path %s/%s\n", host, path);
         }
         /* Host has no path */
         else {
             strcpy(host, curr);
+            strcat(host, "\0");
             printf("Host has no path: Host: %s \n", host);
         }
     }
