@@ -87,20 +87,20 @@ void doit(int clientfd)
                 "Proxy Server does not implement this method");
         return;
     }                                                    //line:netp:doit:endrequesterr
-    
+
     /* Parse URL into host, path, port TODO: Fix so it works for all cases */
     parse_uri(uri, host, port, path);       //line:netp:doit:staticcheck
     /* Form new HTTP Request and send it to server */ 
     build_get(http_hdr, method, path, version);
     build_requesthdrs(&rio_c, http_hdr, host); 
     printf("%s", http_hdr);
-    
+
     /* Open Connection to Server */ 
     serverfd = Open_clientfd(host, port); 
     /* Listen for response from server and forward to client fd */ 
     Rio_readinitb(&rio_s, serverfd); 
     Rio_writen(serverfd, http_hdr, strlen(http_hdr));
-    
+
     /* Reads from server and sends to client */
     read_n_send(&rio_s, clientfd);
 
@@ -190,23 +190,78 @@ void read_n_send(rio_t *rpi, int clientfd)
         printf("%s", buf);
         Rio_writen(clientfd, buf, strlen(buf));
     }
-    
+
 }
 /* $end read_n_send */
 
 /*
  * parse_uri - parse URI into host, path and port
+ * Function can handle URLs with http://, without it, 
+ * Unless specified, Default port and path are 80, and /
+ *
  */
 /* $begin parse_uri */
 void parse_uri(char *uri, char *host, char *port, char *path) 
 {
+    printf("URL: %s\n", uri);
+    char *curr, *next;
+    *port = '\0';
+    *path = '\0';
+    *host = '\0';
+    curr = uri;
+    /* Skip over http if in uri */
+    if (strstr(uri, "http://")) {
+        curr += strlen("http://");
+    }
+    /* Parsing host with port*/
+    if ((next = strpbrk(curr, ":"))) {
+        printf("In host w/ port \n");
+        strncpy(host, curr, next - curr);
+        strcat(host, "\0");
 
-    strcpy(port, "80");   /* Default Port */
+        /* Parsing Port*/
+        if((next = strpbrk(curr, "/"))) {
+            strncpy(port, curr, next - curr);
+            strcat(port, "\0");
+            curr = next;
+            /* Parsing remaining path */
+                strcpy(path, curr);
+            printf("Aft Port parsed port/path %s/%s\n", port, path);
+        }
+        /* Host has no path */
+        else {
+                strcpy(path, curr);
+            printf("Host has no path\n");
+        }
+    }
+    /* Parsing host with no port */
+    else {
+        /* Parse host now */
+        printf("In host without port \n");
+        if ((next = strpbrk(curr, "/"))) { 
+            strncpy(host, curr, next - curr);      
+            strcat(host, "\0");
 
-    sscanf(uri, "http://%s[^:]:%s/%s[^\n]", host, port, path);
-    sscanf(uri, "%*[^/]%*[/]%[^/]", host);
+            curr = next;
+            /* Parsing path now */
+                strcpy(path, curr);
+                printf("No port, Parsed host/path %s/%s\n", host, path);
+        }
+        /* Host has no path */
+        else {
+                strcpy(path, curr);
+            printf("Host has no path: Host: %s \n", host);
+        }
+    }
+    // sscanf(uri, "%*[^/]%*[/]%[^/]", host);
 
-    strcpy(path, "/");
+    /* If path or port still empty, use default values */
+    if (*path == 0)
+        strcpy(path, "/");
+    if (*port == 0)
+        strcpy(port, "80");
+
+    printf("\nHost/Port/Path: %s/%s/%s\n\n", host, port, path);
 }
 /* $end parse_uri */
 

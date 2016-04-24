@@ -171,7 +171,7 @@ void serve_static(int fd, char *filename, int filesize)
 }
 
 /*
- * get_filetype - derive file type from file name
+ * get_filetype - derive file type from file_name
  */
 void get_filetype(char *filename, char *filetype) 
 {
