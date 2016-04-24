@@ -187,7 +187,7 @@ void read_n_send(rio_t *rpi, int clientfd)
 
     /* Read from server and send to client */
     while(Rio_readlineb(rpi, buf, MAXLINE)) {
-        printf("%s", buf);
+        // printf("%s", buf);
         Rio_writen(clientfd, buf, strlen(buf));
     }
 
@@ -225,12 +225,12 @@ void parse_uri(char *uri, char *host, char *port, char *path)
             strcat(port, "\0");
             curr = next;
             /* Parsing remaining path */
-                strcpy(path, curr);
+            strcpy(path, curr);
             printf("Aft Port parsed port/path %s/%s\n", port, path);
         }
         /* Host has no path */
         else {
-                strcpy(path, curr);
+            strcpy(path, curr);
             printf("Host has no path\n");
         }
     }
@@ -244,12 +244,12 @@ void parse_uri(char *uri, char *host, char *port, char *path)
 
             curr = next;
             /* Parsing path now */
-                strcpy(path, curr);
-                printf("No port, Parsed host/path %s/%s\n", host, path);
+            strcpy(path, curr);
+            printf("No port, Parsed host/path %s/%s\n", host, path);
         }
         /* Host has no path */
         else {
-                strcpy(path, curr);
+            strcpy(host, curr);
             printf("Host has no path: Host: %s \n", host);
         }
     }
