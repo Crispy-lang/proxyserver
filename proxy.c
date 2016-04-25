@@ -16,6 +16,7 @@
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
+#define MAX_PORT_SIZE 6 
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\n";
@@ -70,7 +71,7 @@ void doit(int clientfd)
 {
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
     char http_hdr[MAXLINE], host[MAXLINE], path[MAXLINE];
-    char port[MAXLINE]; 
+    char port[MAX_PORT_SIZE]; 
 
     int serverfd; 
 
@@ -188,7 +189,6 @@ void read_n_send(int serverfd, int clientfd)
 
     /* Read from server and send to client */
     while((n = Rio_readn(serverfd, buf, MAXLINE))) {
-        // printf("%s", buf);
         Rio_writen(clientfd, buf, n);
     }
 
@@ -200,6 +200,9 @@ void read_n_send(int serverfd, int clientfd)
  * Function can handle URLs with http://, without it, 
  * Unless specified, Default port and path are 80, and /
  *
+ * This method does alot of string parsing/manipulation
+ * Each string is build letter by letter and a null terminator
+ * added at the end. 
  */
 /* $begin parse_uri */
 void parse_uri(char *uri, char *host, char *port, char *path) 
@@ -218,22 +221,22 @@ void parse_uri(char *uri, char *host, char *port, char *path)
     if ((next = strpbrk(curr, ":"))) {
         printf("In host w/ port \n");
         strncpy(host, curr, next - curr);
-        strcat(host, "\0");
+        host[next-curr] = 0;
 
         /* Parsing Port*/
         if((next = strpbrk(curr, "/"))) {
             strncpy(port, curr, next - curr);
-            strcat(port, "\0");
+            port[next-curr] = 0;
             curr = next;
             /* Parsing remaining path */
             strcpy(path, curr);
-            strcat(path, "\0");
+            path[strlen(curr)] = 0;
             printf("Aft Port parsed port/path %s/%s\n", port, path);
         }
         /* Host has no path */
         else {
             strcpy(path, curr);
-            strcat(path, "\0");
+            path[strlen(curr)] = 0;
             printf("Host has no path\n");
         }
     }
@@ -243,30 +246,34 @@ void parse_uri(char *uri, char *host, char *port, char *path)
         printf("In host without port \n");
         if ((next = strpbrk(curr, "/"))) { 
             strncpy(host, curr, next - curr);      
-            // strcat(host, "\0");
+            host[next-curr] = 0;
 
             curr = next;
             /* Parsing path now */
             strcpy(path, curr);
-            // strcat(path, "\0");
+            strcat(path, "\0");
             printf("No port, Parsed host/path %s/%s\n", host, path);
         }
         /* Host has no path */
         else {
             strcpy(host, curr);
-            strcat(host, "\0");
+            printf("Used for Host!! Size of curr: %d\n", (int)strlen(curr));
+            host[strlen(curr)] = 0;
             printf("Host has no path: Host: %s \n", host);
         }
     }
-    // sscanf(uri, "%*[^/]%*[/]%[^/]", host);
 
     /* If path or port still empty, use default values */
-    if (*path == 0)
-        strcpy(path, "/");
-    if (*port == 0)
-        strcpy(port, "80");
+    if (*path == 0) {
+        strncpy(path, "/", 1);
+        path[1] = 0;
+    }
+    if (*port == 0) {
+        strncpy(port, "80", 2);
+        port[2] = 0;
+    }
 
-    printf("\nHost/Port/Path: %s/%s/%s\n\n", host, port, path);
+    printf("\nHost+Port+Path: %s+%s+%s\n\n", host, port, path);
 }
 /* $end parse_uri */
 
