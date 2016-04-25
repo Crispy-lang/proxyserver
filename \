@@ -219,12 +219,10 @@ void parse_uri(char *uri, char *host, char *port, char *path)
     }
     /* Parsing host with port*/
     if ((next = strpbrk(curr, ":"))) {
+        printf("In host w/ port \n");
         strncpy(host, curr, next - curr);
         host[next-curr] = 0;
-        
-        /* Skipping over ":", we dont keep this */
-        next++;
-        curr = next; 
+
         /* Parsing Port*/
         if((next = strpbrk(curr, "/"))) {
             strncpy(port, curr, next - curr);
@@ -235,10 +233,10 @@ void parse_uri(char *uri, char *host, char *port, char *path)
             path[strlen(curr)] = 0;
             printf("Aft Port parsed port/path %s/%s\n", port, path);
         }
-        /* Host has no path, so we just build the port */
+        /* Host has no path */
         else {
-            strcpy(port, curr);
-            port[strlen(curr)] = 0;
+            strcpy(path, curr);
+            path[strlen(curr)] = 0;
             printf("Host has no path\n");
         }
     }
