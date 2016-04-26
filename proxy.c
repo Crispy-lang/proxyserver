@@ -3,10 +3,34 @@
  *
  * Timothy Kaboya - tkaboya
  *
- * Key Functionalities
- *    1. Accept connections and parse requests back to clients
- *    2. Handles multiple concurrent connections
+ *    ==================
+ *    Key Functionalities
+ *    ==================
+ *    1. Accept connections and parses requests back to clients. 
+ *    PS: This works for all http connections. 
+ *    2. Handles multiple concurrent connections using the 
+ *    Pthread POSIX Library. Each client request is spawned into
+ *    a new thread. 
  *    3. Caches some object using a Most Recently Used List
+ *
+ *    ============
+ *    Handling Bad Input for Robustness and Resiliency
+ *    ============
+ *    - Any Https requests are discarded and client gets a 
+ *    "Proxy is refusing connection" message. 
+ *    Malformed URLs get a HTTP 400/401 Bad Request/Malformed Urls
+ *    In case of server failure on other side, client gets an
+ *    HTTP 500 Bad Gateway error
+ *
+ *    ============
+ *    Things that are not working
+ *    ============
+ *    - Server does not have caching enabled. This was still on my todo list
+ *    - Some http images such as revolving banners on websites do not get loaded.
+ *    Ex: http://www.cs.cmu.edu  The Top Banner. 
+ *    I am still investigating this. The direct urls of these banners show up though
+ *    - SIG PIPE Ignoring not yet done. Server fails on encountering this one
+ *    - I still need to test more thoroughly to ensure server never goes off. 
  *
  */
 
@@ -32,14 +56,15 @@ void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, 
         char *shortmsg, char *longmsg);
-
+void *thread(void *vargp);
 
 int main(int argc, char **argv) 
 {
-    int listenfd, connfd;
+    int listenfd, *connfdp;
     char hostname[MAXLINE], port[MAXLINE];
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
+    pthread_t tid;
 
     /* Default code */
     printf("%s\n", user_agent_hdr); 
@@ -54,14 +79,27 @@ int main(int argc, char **argv)
     listenfd = Open_listenfd(argv[1]);
     while (1) {
         clientlen = sizeof(clientaddr);
-        connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen); //line:netp:tiny:accept
+        connfdp = Malloc(sizeof(int));
+        *connfdp = Accept(listenfd, (SA *)&clientaddr, &clientlen); 
         Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, 
                 port, MAXLINE, 0);
         printf("Accepted connection from (%s, %s)\n", hostname, port);
-        doit(connfd);                                             //line:netp:tiny:doit
-        Close(connfd);                                            //line:netp:tiny:close
+        Pthread_create(&tid, NULL, thread, connfdp);
     }
 }
+
+/* thread routine */
+void *thread(void *vargp) 
+{  
+    int connfd = *((int *)vargp);
+    Pthread_detach(pthread_self()); 
+    Free(vargp);
+    doit(connfd);                                       //line:netp:tiny:doit
+    Close(connfd);                                      //line:netp:tiny:close
+    return NULL;
+}
+/* $end echoservertmain */
+
 
 /*
  * doit - handle one HTTP request/response transaction
@@ -79,18 +117,18 @@ void doit(int clientfd)
 
     /* Read request line and headers */
     Rio_readinitb(&rio_c, clientfd);
-    if (!Rio_readlineb(&rio_c, buf, MAXLINE))  //line:netp:doit:readrequest
+    if (!Rio_readlineb(&rio_c, buf, MAXLINE)) 
         return;
-    sscanf(buf, "%s %s %s", method, uri, version);       //line:netp:doit:parserequest
+    sscanf(buf, "%s %s %s", method, uri, version);   
     strcpy(version, "HTTP/1.0");                    
-    if (strcasecmp(method, "GET")) {                     //line:netp:doit:beginrequesterr
+    if (strcasecmp(method, "GET")) {         
         clienterror(clientfd, method, "501", "Not Implemented",
                 "Proxy Server does not implement this method");
         return;
-    }                                                    //line:netp:doit:endrequesterr
+    }                                       
 
     /* Parse URL into host, path, port  */
-    parse_uri(uri, host, port, path);       //line:netp:doit:staticcheck
+    parse_uri(uri, host, port, path);     //line:netp:doit:staticcheck
     /* Form new HTTP Request and send it to server */ 
     build_get(http_hdr, method, path, version);
     build_requesthdrs(&rio_c, http_hdr, host); 
@@ -235,7 +273,7 @@ void parse_uri(char *uri, char *host, char *port, char *path)
     if ((next = strpbrk(curr, ":"))) {
         strncpy(host, curr, next - curr);
         host[next-curr] = 0;
-        
+
         /* Skipping over ":", we dont keep this */
         next++;
         curr = next; 
