@@ -89,7 +89,7 @@ void doit(int clientfd)
         return;
     }                                                    //line:netp:doit:endrequesterr
 
-    /* Parse URL into host, path, port TODO: Fix so it works for all cases */
+    /* Parse URL into host, path, port  */
     parse_uri(uri, host, port, path);       //line:netp:doit:staticcheck
     /* Form new HTTP Request and send it to server */ 
     build_get(http_hdr, method, path, version);
@@ -97,7 +97,11 @@ void doit(int clientfd)
     printf("%s", http_hdr);
 
     /* Open Connection to Server. TODO: Error check */ 
-    serverfd = Open_clientfd(host, port); 
+    if((serverfd = open_clientfd(host, port)) < 0) {
+        clienterror(clientfd, method, "400", "Bad Request",
+                "Malformed URL");
+        return;
+    }
     /* Listen for response from server and forward to client fd */ 
     Rio_readinitb(&rio_s, serverfd); 
     Rio_writen(serverfd, http_hdr, strlen(http_hdr));
@@ -188,8 +192,18 @@ void read_n_send(int serverfd, int clientfd)
     char buf[MAXLINE];
 
     /* Read from server and send to client */
-    while((n = Rio_readn(serverfd, buf, MAXLINE))) {
-        Rio_writen(clientfd, buf, n);
+    while((n = rio_readn(serverfd, buf, MAXLINE)) > 0) {
+        if((rio_writen(clientfd, buf, n) != n)) {
+            clienterror(clientfd, "GET", "400", "Bad Request",
+                    "Client not understood due to malformed syntax");
+            return;
+        }
+    }
+
+    /* Handling invalid response from upstream server */
+    if (n < 0) {
+        clienterror(clientfd, "GET", "502", "Bad Gateway",
+                "Client not understood due to malformed syntax");
     }
 
 }
@@ -207,7 +221,7 @@ void read_n_send(int serverfd, int clientfd)
 /* $begin parse_uri */
 void parse_uri(char *uri, char *host, char *port, char *path) 
 {
-    printf("URL: %s\n", uri);
+    printf("Url: %s\n", uri);
     char *curr, *next;
     *port = '\0';
     *path = '\0';
@@ -233,19 +247,16 @@ void parse_uri(char *uri, char *host, char *port, char *path)
             /* Parsing remaining path */
             strcpy(path, curr);
             path[strlen(curr)] = 0;
-            printf("Aft Port parsed port/path %s/%s\n", port, path);
         }
         /* Host has no path, so we just build the port */
         else {
             strcpy(port, curr);
             port[strlen(curr)] = 0;
-            printf("Host has no path\n");
         }
     }
     /* Parsing host with no port */
     else {
         /* Parse host now */
-        printf("In host without port \n");
         if ((next = strpbrk(curr, "/"))) { 
             strncpy(host, curr, next - curr);      
             host[next-curr] = 0;
@@ -254,14 +265,11 @@ void parse_uri(char *uri, char *host, char *port, char *path)
             /* Parsing path now */
             strcpy(path, curr);
             strcat(path, "\0");
-            printf("No port, Parsed host/path %s/%s\n", host, path);
         }
         /* Host has no path */
         else {
             strcpy(host, curr);
-            printf("Used for Host!! Size of curr: %d\n", (int)strlen(curr));
             host[strlen(curr)] = 0;
-            printf("Host has no path: Host: %s \n", host);
         }
     }
 

@@ -940,7 +940,8 @@ int open_clientfd(char *hostname, char *port) {
     hints.ai_socktype = SOCK_STREAM;  /* Open a connection */
     hints.ai_flags = AI_NUMERICSERV;  /* ... using a numeric port arg. */
     hints.ai_flags |= AI_ADDRCONFIG;  /* Recommended for connections */
-    Getaddrinfo(hostname, port, &hints, &listp);
+    if((getaddrinfo(hostname, port, &hints, &listp) != 0))
+        return -1;
 
     /* Walk the list for one that we can successfully connect to */
     for (p = listp; p; p = p->ai_next) {
