@@ -64,7 +64,10 @@ int main(int argc, char **argv)
     char hostname[MAXLINE], port[MAXLINE];
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
-    pthread_t tid;
+    pthread_t tid; /* Thread ID for concurrent threads */ 
+
+    /* Blocking SIGPIPE Signal */
+    Signal(SIGPIPE, SIG_IGN);
 
     /* Default code */
     printf("%s\n", user_agent_hdr); 
@@ -142,12 +145,12 @@ void doit(int clientfd)
     }
     /* Listen for response from server and forward to client fd */ 
     Rio_readinitb(&rio_s, serverfd); 
-    Rio_writen(serverfd, http_hdr, strlen(http_hdr));
-
-    /* Reads from server and sends to client */
-    read_n_send(serverfd, clientfd);
-
+    if(rio_writen(serverfd, http_hdr, strlen(http_hdr)) > 0) {
+        /* Reads from server and sends to client */
+        read_n_send(serverfd, clientfd);
+    }
     Close(serverfd);
+
 }
 /* $end doit */
 
@@ -334,6 +337,7 @@ void parse_uri(char *uri, char *host, char *port, char *path)
 
 /*
  * clienterror - returns an error message to the client
+ * Write to client terminates in case there is a write error (-1)
  */
 /* $begin clienterror */
 void clienterror(int fd, char *cause, char *errnum, 
@@ -346,15 +350,19 @@ void clienterror(int fd, char *cause, char *errnum,
     sprintf(body, "%s<body bgcolor=""ffffff"">\r\n", body);
     sprintf(body, "%s%s: %s\r\n", body, errnum, shortmsg);
     sprintf(body, "%s<p>%s: %s\r\n", body, longmsg, cause);
-    sprintf(body, "%s<hr><em>Tim's Proxy Web server</em>\r\n", body);
+    sprintf(body, "%s<hr><em>Tim Kaboya's Proxy Web server</em>\r\n", body);
 
     /* Print the HTTP response */
     sprintf(buf, "HTTP/1.0 %s %s\r\n", errnum, shortmsg);
-    Rio_writen(fd, buf, strlen(buf));
+    if(rio_writen(fd, buf, strlen(buf)) < 0)
+        return;
     sprintf(buf, "Content-type: text/html\r\n");
-    Rio_writen(fd, buf, strlen(buf));
+    if(rio_writen(fd, buf, strlen(buf)) < 0)
+        return;
     sprintf(buf, "Content-length: %d\r\n\r\n", (int)strlen(body));
-    Rio_writen(fd, buf, strlen(buf));
-    Rio_writen(fd, body, strlen(body));
+    if(rio_writen(fd, buf, strlen(buf)) < 0)
+        return;
+    if(rio_writen(fd, body, strlen(body)) < 0)
+        return;
 }
 /* $end clienterror */
