@@ -18,9 +18,11 @@
  *    ============
  *    - Any Https requests are discarded and client gets a 
  *    "Proxy is refusing connection" message. 
- *    Malformed URLs get a HTTP 400/401 Bad Request/Malformed Urls
- *    In case of server failure on other side, client gets an
+ *    - Malformed URLs get a HTTP 400/401 Bad Request/Malformed Urls
+ *    - In case of server failure on other side, client gets an
  *    HTTP 500 Bad Gateway error
+ *    - When user sends SIGPIPE through multiple refreshing, this is ignored
+ *    Server handles Signal Errors in read/write operations
  *
  *    ============
  *    Things that are not working
@@ -29,7 +31,6 @@
  *    - Some http images such as revolving banners on websites do not get loaded.
  *    Ex: http://www.cs.cmu.edu  The Top Banner. 
  *    I am still investigating this. The direct urls of these banners show up though
- *    - SIG PIPE Ignoring not yet done. Server fails on encountering this one
  *    - I still need to test more thoroughly to ensure server never goes off. 
  *
  */
