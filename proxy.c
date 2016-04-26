@@ -222,6 +222,11 @@ void build_requesthdrs(rio_t *rp, char *http_hdr, char *host)
 
 /*
  * read_n_send - Reads from server and forwards to client
+ * 
+ * Terminates when
+ * 1. Read from the server fails (HTTP 502 code)
+ * 2. Write to client fails. (HTTP 400 Code)
+ * In both cases, a -1 is the return value of n wc is handled. 
  */
 /* $begin read_n_send */
 void read_n_send(int serverfd, int clientfd)
