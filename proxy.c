@@ -167,8 +167,11 @@ void build_get(char *http_hdr, char *method, char *path, char *version)
 
 
 /*
- * build_requesthdrs - build HTTP request headers, print it then send
- * to server.
+ * build_requesthdrs - After building the GET, 
+ * This function adds onto the the HTTP Request by adding our chosen
+ * headers including Proxy Connection: close. 
+ *
+ * It modifies the request so as to port it to server
  */
 /* $begin build_requesthdrs */
 void build_requesthdrs(rio_t *rp, char *http_hdr, char *host) 
