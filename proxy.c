@@ -28,9 +28,9 @@
  *    Things that are not working
  *    ============
  *    - Server does not have caching enabled. This was still on my todo list
- *    - Some http images such as revolving banners on websites do not get loaded.
+ *    - Some http images such as revolving banners do not get loaded.
  *    Ex: http://www.cs.cmu.edu  The Top Banner. 
- *    I am still investigating this. The direct urls of these banners show up though
+ *    Direct urls of these banners show up though
  *    - I still need to test more thoroughly to ensure server never goes off. 
  *
  */
@@ -47,14 +47,10 @@
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\n";
 
 void doit(int clientfd);
-void read_requesthdrs(rio_t *rp);
 void build_get(char *http_hdr, char * method, char *path, char *version); 
 void build_requesthdrs(rio_t *rpi, char *http_hdr, char *host); 
-void read_n_send(int serverfd, int clientfd);
+void read_n_send(int serverfd, int clientfd, rio_t *rio);
 void parse_uri(char *uri, char *host, char *port, char *path);
-void serve_static(int fd, char *filename, int filesize);
-void get_filetype(char *filename, char *filetype);
-void serve_dynamic(int fd, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, 
         char *shortmsg, char *longmsg);
 void *thread(void *vargp);
@@ -138,7 +134,7 @@ void doit(int clientfd)
     build_requesthdrs(&rio_c, http_hdr, host); 
     printf("%s", http_hdr);
 
-    /* Open Connection to Server. TODO: Error check */ 
+    /* Open Connection to Server. */ 
     if((serverfd = open_clientfd(host, port)) < 0) {
         clienterror(clientfd, method, "400", "Bad Request",
                 "Malformed URL");
@@ -148,7 +144,7 @@ void doit(int clientfd)
     Rio_readinitb(&rio_s, serverfd); 
     if(rio_writen(serverfd, http_hdr, strlen(http_hdr)) > 0) {
         /* Reads from server and sends to client */
-        read_n_send(serverfd, clientfd);
+        read_n_send(serverfd, clientfd, &rio_s);
     }
     Close(serverfd);
 
@@ -169,24 +165,6 @@ void build_get(char *http_hdr, char *method, char *path, char *version)
     strcat(http_hdr, "\n"); 
 }
 
-
-/*
- * read_requesthdrs - read HTTP request headers and output them.
- */
-/* $begin read_requesthdrs */
-void read_requesthdrs(rio_t *rp) 
-{
-    char buf[MAXLINE];
-
-    Rio_readlineb(rp, buf, MAXLINE);
-    printf("%s", buf);
-    while(strcmp(buf, "\r\n")) {          //line:netp:readhdrs:checkterm
-        Rio_readlineb(rp, buf, MAXLINE);
-        printf("%s", buf);
-    }
-    return;
-}
-/* $end read_requesthdrs */
 
 /*
  * build_requesthdrs - build HTTP request headers, print it then send
@@ -233,13 +211,13 @@ void build_requesthdrs(rio_t *rp, char *http_hdr, char *host)
  * In both cases, a -1 is the return value of n wc is handled. 
  */
 /* $begin read_n_send */
-void read_n_send(int serverfd, int clientfd)
+void read_n_send(int serverfd, int clientfd, rio_t *rio)
 {
     int n;
     char buf[MAXLINE];
 
     /* Read from server and send to client */
-    while((n = rio_readn(serverfd, buf, MAXLINE)) > 0) {
+    while((n = rio_readnb(rio, buf, MAXLINE)) > 0) {
         if((rio_writen(clientfd, buf, n) != n)) {
             clienterror(clientfd, "GET", "400", "Bad Request",
                     "Client not understood due to malformed syntax");
