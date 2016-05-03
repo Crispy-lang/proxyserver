@@ -94,8 +94,8 @@ void *thread(void *vargp)
     int connfd = *((int *)vargp);
     Pthread_detach(pthread_self()); 
     Free(vargp);
-    doit(connfd);                                       //line:netp:tiny:doit
-    Close(connfd);                                      //line:netp:tiny:close
+    doit(connfd);                                       //line:proxy:doit
+    Close(connfd);                                      //line:proxy:close
     return NULL;
 }
 /* $end echoservertmain */
@@ -128,7 +128,7 @@ void doit(int clientfd)
     }                                       
 
     /* Parse URL into host, path, port  */
-    parse_uri(uri, host, port, path);     //line:netp:doit:staticcheck
+    parse_uri(uri, host, port, path);     
     /* Form new HTTP Request and send it to server */ 
     build_get(http_hdr, method, path, version);
     build_requesthdrs(&rio_c, http_hdr, host); 
@@ -187,7 +187,7 @@ void build_requesthdrs(rio_t *rp, char *http_hdr, char *host)
     else 
         strcat(http_hdr, buf);
 
-    while(strcmp(buf, "\r\n")) {          //line:netp:buildhdrs:checkterm
+    while(strcmp(buf, "\r\n")) {        
         Rio_readlineb(rp, buf, MAXLINE);
 
         /* Changes to header, change User$-Agent and Connection hdrs */
